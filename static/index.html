@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Docker Logs Monitor</title>
+    <style>
+        .container-logs {
+            margin: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .log-window {
+            height: 400px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            color: #fff;
+            padding: 10px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .container-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f5f5f5;
+        }
+    </style>
+</head>
+<body>
+    <div id="containers"></div>
+
+    <script>
+        async function fetchContainers() {
+            const response = await fetch('/api/containers');
+            const containers = await response.json();
+            const containersDiv = document.getElementById('containers');
+            containersDiv.innerHTML = '';
+    
+            containers.forEach(container => {
+                const containerDiv = document.createElement('div');
+                containerDiv.className = 'container-logs';
+                
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'container-header';
+                headerDiv.innerHTML = `
+                    <h3>${container.name}</h3>
+                    <div>
+                        <small>ID: ${container.id.substring(0, 12)}</small>
+                        <small>Image: ${container.image.join(', ')}</small>
+                    </div>
+                `;
+    
+                const logsDiv = document.createElement('div');
+                logsDiv.className = 'log-window';
+                logsDiv.id = `logs-${container.id}`;
+    
+                containerDiv.appendChild(headerDiv);
+                containerDiv.appendChild(logsDiv);
+                containersDiv.appendChild(containerDiv);
+    
+                connectWebSocket(container.id);
+            });
+        }
+    
+        function connectWebSocket(containerId) {
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const ws = new WebSocket(`${protocol}${window.location.host}/ws/${containerId}`);
+            const logsDiv = document.getElementById(`logs-${containerId}`);
+    
+            ws.onmessage = function(event) {
+                logsDiv.textContent += event.data + '\n';
+                logsDiv.scrollTop = logsDiv.scrollHeight;
+            };
+    
+            ws.onclose = function() {
+                setTimeout(() => connectWebSocket(containerId), 1000);
+            };
+    
+            ws.onerror = function(err) {
+                console.error(`WebSocket error for container ${containerId}:`, err);
+                ws.close();
+            };
+        }
+    
+        fetchContainers();
+        // Fetch containers every 10 seconds
+        setInterval(fetchContainers, 10000);
+    </script>
+</body>
+</html> 
